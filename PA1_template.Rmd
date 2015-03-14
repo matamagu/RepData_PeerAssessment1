@@ -1,0 +1,140 @@
+---
+output: html_document
+---
+# Reproducible Research: Activity Monitoring Data
+
+
+## Read and load .CSV data
+```{r loaddata}
+data <- read.csv("activity.csv")
+head(data)
+```
+
+## What is mean total number of steps taken per day?
+###### Calculate the total number of steps taken per day
+```{r}
+stepsperday <- aggregate(data$steps, by=list(date=data$date), sum)
+head(stepsperday)
+```
+###### Calculate Mean and Median..
+```{r}
+meanTotalStepsPerDay <- mean(stepsperday$x,na.rm=TRUE)
+medianTotalStepsPerDay <- median(stepsperday$x,na.rm=TRUE)
+meanTotalStepsPerDay
+medianTotalStepsPerDay
+library(ggplot2)
+ggplot(stepsperday, aes(x = x)) + 
+       geom_histogram(fill = "cyan", binwidth = 1000) + 
+        labs(title="Histogram of Steps Taken per Day", 
+             x = "Number of Steps per Day", y = "Number of times in a day(Count)") + theme_bw()
+
+```
+
+## What is the average daily activity pattern?
+###### construct a time series of the average number of steps taken per day, measured at each 5-minute interval
+
+```{r}
+
+data$date <- as.Date(data$date, format = "%Y-%m-%d")
+data$interval <- as.factor(data$interval)
+stepsByInterval <- aggregate(data$steps, 
+                                by = list(interval = data$interval),
+                                FUN=mean, na.rm=TRUE)
+head(stepsByInterval)
+
+stepsByInterval$interval <- 
+        as.integer(levels(stepsByInterval$interval)[stepsByInterval$interval])
+colnames(stepsByInterval) <- c("interval", "steps")
+
+ggplot(stepsByInterval, aes(x=interval, y=steps)) +   
+        geom_line(color="cyan", size=1) +  
+        labs(title="Average Daily Activity Pattern", x="Interval", y="Number of steps") +  
+        theme_bw()
+
+```
+```{r}
+max_interval <- stepsByInterval[which.max(  
+        stepsByInterval$steps),]
+max_interval
+```
+##Imputing missing values
+###### Calculate the total number of missing values in the dataset (i.e. the total number of rows with NA???s)
+
+```{r}
+Missing_data <- sum(is.na(data))
+Missing_data
+```
+###### A strategy for filling in all of the missing values in the dataset could use the mean for that 5-min interval. And that???s what we do:
+
+```{r}
+data$steps_2 <- data$steps   # create a new column of steps derivated from 1st one
+nObs <- nrow(data)
+iRow <- 1
+while(iRow <= nObs) {
+  if( is.na(data$steps[iRow]) ) {
+        intervalRow <- data$interval[iRow]
+        data$steps_2[iRow] = stepsByInterval$steps[which(stepsByInterval$interval==intervalRow)]
+    }   
+    iRow <- iRow+1
+}
+head(data)
+```
+###### Make a histogram of the total number of steps taken each day and calculating and reporting the mean and median total number of steps taken per day.
+
+```{r}
+stepsByDay <- aggregate(data$steps_2, by=list(date=data$date), sum)
+meanTotalStepsByDay <- mean(stepsByDay$x)
+medianTotalStepsByDay <- median(stepsByDay$x)
+
+with(stepsByDay, {    
+  barplot(height=x, names.arg=date, xlab="Date", ylim=c(0,25000),
+    ylab="NUmber of steps", main = "Number of steps by day", panel.first=grid())
+})
+abline(h=meanTotalStepsByDay, col="blue")
+abline(h=medianTotalStepsByDay, col="red")
+
+meanTotalStepsByDay
+medianTotalStepsByDay
+```
+##Are there differences in activity patterns between weekdays and weekends?
+
+```{r}
+weekdays_steps <- function(data) {
+    weekdays_steps <- aggregate(data$steps, by=list(interval = data$interval),
+                          FUN=mean, na.rm=T)
+    # convert to integers for plotting
+    weekdays_steps$interval <- 
+            as.integer(levels(weekdays_steps$interval)[weekdays_steps$interval])
+    colnames(weekdays_steps) <- c("interval", "steps")
+    weekdays_steps
+}
+
+data_by_weekdays <- function(data) {
+    data$weekday <- 
+            as.factor(weekdays(data$date)) # weekdays
+    weekend_data <- subset(data, weekday %in% c("Saturday","Sunday"))
+    weekday_data <- subset(data, !weekday %in% c("Saturday","Sunday"))
+
+    weekend_steps <- weekdays_steps(weekend_data)
+    weekday_steps <- weekdays_steps(weekday_data)
+
+    weekend_steps$dayofweek <- rep("weekend", nrow(weekend_steps))
+    weekday_steps$dayofweek <- rep("weekday", nrow(weekday_steps))
+
+    data_by_weekdays <- rbind(weekend_steps, weekday_steps)
+    data_by_weekdays$dayofweek <- as.factor(data_by_weekdays$dayofweek)
+    data_by_weekdays
+}
+
+data_weekdays <- data_by_weekdays(data)
+```
+###### Activity patterns between weekdays and weekends. We can see in below graph that activity on the weekday has the greatest peak from all steps intervals. At the same time weekends activities has more peaks over a hundred than weekday.
+```{r}
+ggplot(data_weekdays, aes(x=interval, y=steps)) + 
+        geom_line(color="violet") + 
+        facet_wrap(~ dayofweek, nrow=2, ncol=1) +
+        labs(x="Interval", y="Number of steps") +
+        theme_bw()
+```
+
+
